@@ -62,3 +62,69 @@ Uses `build-backend = "setuptools.build_meta"` (not the legacy backend).
 - API key: `~/.socdata/.env` (ANTHROPIC_API_KEY)
 - Dataset cache: `~/.socdata/cache/` (Parquet files)
 - Session exports: `~/socdata_exports/`
+
+---
+
+## Direct Data Analysis (Claude Code as GSS Analyst)
+
+The `socdata-tool` CLI lets Claude Code search, inspect, describe, and analyze GSS data directly — no inner REPL needed. Data lives at `~/.socdata/cache/` (symlinked as `data/` in the repo).
+
+### CLI Commands
+
+```bash
+# Search variables by name or label keyword
+socdata-tool search "confidence"
+socdata-tool search "education" --limit 50
+
+# Inspect variable metadata (JSON: label, type, n, categories, years)
+socdata-tool inspect CONSCI EDUC AGE SEX
+
+# Weighted frequency table (categorical) or summary stats (continuous)
+socdata-tool describe CONSCI --years 2018,2021
+socdata-tool describe AGE
+
+# Run statistical analysis (JSON output with coefficients, p-values, etc.)
+socdata-tool analyze --dv CONSCI --ivs EDUC --controls AGE,SEX --method ordinal --years 2018,2021
+```
+
+### Method Selection Rules
+
+Choose the method based on the dependent variable type:
+
+| DV Type | Method | Example DVs |
+|---------|--------|-------------|
+| Continuous (numeric scale) | `ols` | AGE, EDUC, PRESTG10, REALINC |
+| Binary (0/1 or 2 categories) | `logistic` | GRASS (legalize marijuana), GUNLAW |
+| Ordinal (ordered categories, 3+) | `ordinal` | CONSCI, HAPPY, POLVIEWS, SATJOB |
+| Categorical × Categorical | `chisq` | Any two categorical vars |
+
+### GSS-Specific Notes
+
+- **Weight variable**: Default is `WTSSPS` (2004–present); use `WTSSALL` for pre-2004 or pooled cross-year analysis.
+- **Variable names**: Lowercase in both parquet and metadata JSON. The CLI accepts any case and normalizes internally. Display is UPPERCASE by convention.
+- **Common variables**: YEAR, AGE, SEX, RACE, EDUC, DEGREE, INCOME, REALINC, POLVIEWS, PARTYID, RELIG, ATTEND, HAPPY, HEALTH, CLASS, WRKSTAT
+- **Years**: GSS runs 1972–2022 (biennial after 1994, with a 2021 panel). Filter with `--years` to avoid cross-era confounds.
+- **Missing data**: The stats engine drops rows with missing values on analysis variables automatically.
+
+### Custom Analysis via Python
+
+For analyses beyond the 4 built-in methods, write a one-off script:
+
+```python
+import pandas as pd
+from socdata.stats.weights import prepare_analysis_df
+
+df = pd.read_parquet("~/.socdata/cache/gss_cumulative.parquet", columns=["HAPPY", "EDUC", "AGE", "YEAR", "WTSSPS"])
+df = df[df["YEAR"].isin([2018, 2021])].dropna(subset=["HAPPY", "EDUC"])
+
+# prepare_analysis_df handles weight normalization and NA drops
+clean_df, wt_col = prepare_analysis_df(df, dv="HAPPY", ivs=["EDUC"], controls=["AGE"], weight_var="WTSSPS")
+```
+
+### Typical Workflow
+
+1. **Search** for variables related to the topic
+2. **Inspect** candidate variables to understand categories and availability
+3. **Describe** the DV to confirm its distribution and choose the right method
+4. **Analyze** with IVs, controls, and year filters
+5. Interpret the JSON results conversationally
