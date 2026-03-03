@@ -1,0 +1,3 @@
+"""socdata — Multi-dataset sociology research assistant."""
+
+__version__ = "0.1.0"
