@@ -16,12 +16,23 @@ import numpy as np
 import pandas as pd
 
 # ---------------------------------------------------------------------------
-# Paths
+# Paths — prefer project data/ dir, fall back to ~/.socdata/cache/
 # ---------------------------------------------------------------------------
 
-CACHE_DIR = Path.home() / ".socdata" / "cache"
-META_PATH = CACHE_DIR / "gss_cumulative_meta.json"
-PARQUET_PATH = CACHE_DIR / "gss_cumulative.parquet"
+_PROJECT_DATA = Path(__file__).resolve().parent.parent / "data"
+_HOME_CACHE = Path.home() / ".socdata" / "cache"
+
+
+def _resolve(filename: str) -> Path:
+    """Return the first existing path for *filename*, preferring project data/."""
+    proj = _PROJECT_DATA / filename
+    if proj.exists():
+        return proj
+    return _HOME_CACHE / filename
+
+
+META_PATH = _resolve("gss_cumulative_meta.json")
+PARQUET_PATH = _resolve("gss_cumulative.parquet")
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -111,9 +122,9 @@ def inspect(variables: tuple[str, ...]):
     value_labels = meta["value_labels"]
 
     # Load only the requested columns from parquet (lowercase)
-    col_vars = [_col(v) for v in variables]
+    col_vars = list(dict.fromkeys([_col(v) for v in variables] + ["year"]))
     try:
-        df = _load_parquet(columns=col_vars + ["year"])
+        df = _load_parquet(columns=col_vars)
     except Exception as e:
         click.echo(f"Error loading columns: {e}", err=True)
         sys.exit(1)
