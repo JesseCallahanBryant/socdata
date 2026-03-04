@@ -20,6 +20,7 @@ from socdata.datasets.base import VariableInfo
 from socdata.datasets.registry import get_provider, list_providers
 from socdata.display import (
     console,
+    elapsed_progress,
     print_claude_response,
     print_coefficient_table,
     print_dataset_table,
@@ -171,7 +172,7 @@ class Session:
             return
 
         try:
-            with console.status("[cyan]Thinking...[/]", spinner="dots"):
+            with elapsed_progress("Thinking..."):
                 response = self.conversation.chat(user_input)
         except anthropic.AuthenticationError:
             print_error("Invalid API key. Run [bold]socdata --setup[/] to update it.")
@@ -295,13 +296,10 @@ class Session:
         self._provider = provider
 
         # Load the data
-        print_info(f"Loading {provider.display_name}...")
         try:
-            with console.status(
-                f"[cyan]Loading {provider.display_name} (first time may take a minute)...[/]",
-                spinner="dots",
-            ):
+            with elapsed_progress(f"Loading {provider.display_name}...") as update:
                 self._df = provider.download(self.context.years or None)
+                update("Ready")
         except Exception as e:
             print_error(f"Failed to load dataset: {e}")
             self.context.dataset = ""
@@ -334,7 +332,7 @@ class Session:
             {self.context.dv} | set(self.context.ivs) | set(self.context.controls)
         )
 
-        with console.status("[cyan]Inspecting variables...[/]", spinner="dots"):
+        with elapsed_progress("Inspecting variables..."):
             results = self._provider.inspect_variables(self._df, all_vars)
 
         print_variable_table(results)
@@ -375,13 +373,11 @@ class Session:
             return
 
         print_stage_header(WorkflowStage.ANALYSIS.value)
-        print_info(f"Running {self.context.selected_method} analysis...")
 
-        with console.status(
-            f"[cyan]Running {self.context.selected_method} analysis...[/]",
-            spinner="dots",
-        ):
+        with elapsed_progress("Preparing data...") as update:
+            update(f"Fitting {self.context.selected_method} model...")
             result = run_analysis(self.context, self._df)
+            update("Computing results...")
 
         result_dict = result.to_dict()
         self._last_results = result_dict
@@ -430,7 +426,7 @@ class Session:
 
         self.conversation.inject_results(results_text)
 
-        with console.status("[cyan]Interpreting results...[/]", spinner="dots"):
+        with elapsed_progress("Interpreting results..."):
             interpretation = self.conversation.chat(
                 "Please provide a substantive interpretation of these findings."
             )

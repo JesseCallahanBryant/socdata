@@ -2,12 +2,40 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
+from rich.progress import (
+    BarColumn,
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    TimeElapsedColumn,
+)
 from rich.table import Table
 
 console = Console()
+
+
+@contextmanager
+def elapsed_progress(description: str = "Working..."):
+    """Indeterminate progress bar with elapsed time. Yields update(desc) callable."""
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[bold blue]{task.description}"),
+        BarColumn(pulse_style="cyan"),
+        TimeElapsedColumn(),
+        console=console,
+        transient=True,
+    ) as progress:
+        task = progress.add_task(description, total=None)
+
+        def update(desc: str) -> None:
+            progress.update(task, description=desc)
+
+        yield update
 
 BANNER = r"""
  ____              ____        _
