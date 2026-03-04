@@ -145,13 +145,9 @@ class Session:
         if wants_advance or wants_analysis:
             self._try_advance_stage(wants_analysis)
 
-        # If user wants to run analysis and we're ready, skip chat and go straight to analysis
-        if (
-            wants_analysis
-            and self.stage == WorkflowStage.ANALYSIS
-            and self.context.is_ready_for_analysis()
-            and self._df is not None
-        ):
+        # If user explicitly wants to run analysis and we're ready, skip chat
+        if wants_analysis and self.context.is_ready_for_analysis() and self._df is not None:
+            self.stage = WorkflowStage.ANALYSIS
             self._run_analysis()
             return
 
@@ -194,21 +190,14 @@ class Session:
             self._run_variable_inspection()
             self._vars_inspected = True
 
-        # Analysis fires when user explicitly asks and context is complete
-        if self.stage == WorkflowStage.ANALYSIS and wants_analysis:
-            if self.context.is_ready_for_analysis() and self._df is not None:
+        # Auto-run analysis as soon as method is set and context is complete
+        if self.context.is_ready_for_analysis() and self._df is not None:
+            if self.stage in (
+                WorkflowStage.METHOD_SELECTION,
+                WorkflowStage.ANALYSIS,
+            ):
+                self.stage = WorkflowStage.ANALYSIS
                 self._run_analysis()
-            else:
-                missing = []
-                if not self.context.dataset:
-                    missing.append("dataset")
-                if not self.context.dv:
-                    missing.append("dependent variable")
-                if not self.context.ivs:
-                    missing.append("independent variables")
-                if not self.context.selected_method:
-                    missing.append("method")
-                print_info("Not ready to run yet — still need: " + ", ".join(missing))
 
     def _extract_structured_output(self, text: str) -> None:
         """Parse Claude's response for structured specs."""
