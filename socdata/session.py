@@ -53,6 +53,17 @@ _HYPOTHESIS_RE = re.compile(r"HYPOTHESIS:\s*(.+)", re.IGNORECASE)
 _METHOD_RE = re.compile(r"METHOD:\s*(logistic|ordinal|ols|chisq)", re.IGNORECASE)
 _DATASET_RE = re.compile(r"DATASET:\s*(\w+)", re.IGNORECASE)
 
+# Natural language: user mentions a dataset by name
+_USER_DATASET_RE = re.compile(
+    r"\b(?:use|load|let'?s?\s+use|work\s+with|switch\s+to|try)\s+"
+    r"(?:the\s+)?(\w+?)(?:\s+data(?:set)?)?(?:\s|$|\.)"
+    r"|\b(\w+)\s+data(?:set)?\b",
+    re.IGNORECASE,
+)
+
+# Known dataset names for matching
+_KNOWN_DATASETS = {"gss", "anes", "wvs", "census", "ipums"}
+
 # Natural language: user wants to advance
 _ADVANCE_RE = re.compile(
     r"\bmove\s+on\b"
@@ -139,6 +150,14 @@ class Session:
     def _process_message(self, user_input: str) -> None:
         import anthropic
 
+        # Auto-detect dataset from user input (e.g., "let's use GSS data")
+        if not self.context.dataset:
+            m = _USER_DATASET_RE.search(user_input)
+            if m:
+                candidate = (m.group(1) or m.group(2) or "").lower()
+                if candidate in _KNOWN_DATASETS:
+                    self._select_dataset(candidate)
+
         wants_advance = bool(_ADVANCE_RE.search(user_input))
         wants_analysis = bool(_RUN_ANALYSIS_RE.search(user_input))
 
@@ -192,12 +211,8 @@ class Session:
 
         # Auto-run analysis as soon as method is set and context is complete
         if self.context.is_ready_for_analysis() and self._df is not None:
-            if self.stage in (
-                WorkflowStage.METHOD_SELECTION,
-                WorkflowStage.ANALYSIS,
-            ):
-                self.stage = WorkflowStage.ANALYSIS
-                self._run_analysis()
+            self.stage = WorkflowStage.ANALYSIS
+            self._run_analysis()
 
     def _extract_structured_output(self, text: str) -> None:
         """Parse Claude's response for structured specs."""
